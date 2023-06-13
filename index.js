@@ -122,11 +122,15 @@ function onFieldHover(evt) {
   const input = evt.target;
   const tooltip = document.querySelector('div#tooltip');
   const { top, height } = input.getBoundingClientRect();
-  const attrs = extractAttributes(input, ['data-name', 'data-field-length']);
-  tooltip.style.visibility = 'visible';
-  tooltip.style.left = evt.x;
-  tooltip.style.top = top + height;
-  tooltip.innerHTML = `${attrs['data-name']} (${attrs['data-field-length']} char${attrs['data-field-length'] == 1 ? 's' : ''})`;
+  const { dataName, dataFieldLength } = extractAttributes(input, ['data-name', 'data-field-length']);
+  if (dataName) {
+    tooltip.style.visibility = 'visible';
+    tooltip.style.left = evt.x;
+    tooltip.style.top = top + height + 1; // for the outline
+    tooltip.innerHTML = `${dataName} (${dataFieldLength} char${dataFieldLength == 1 ? 's' : ''})`;
+  } else {
+    tooltip.style.visibility = 'hidden';
+  }
   evt.stopPropagation();
 }
 
@@ -144,7 +148,7 @@ function renderAchFile(achFile) {
     container.appendChild(row);
   });
   container.addEventListener('focus', onFieldFocus, true);
-  container.addEventListener('mouseover', onFieldHover, true);
+  container.addEventListener('mousemove', onFieldHover, true);
   document.querySelector('div#contents').appendChild(container);
 }
 const CHAR_WIDTH = 12;
@@ -176,7 +180,11 @@ function extractAttributes(element, attributes) {
   return attributes.reduce((obj, attribute) => {
     return {
       ...obj,
-      [attribute]: element.getAttribute(attribute),
+      [snakeToCamelCase(attribute)]: element.getAttribute(attribute),
     };
   }, {});
+}
+
+function snakeToCamelCase(str) {
+  return str.split('-').map((s, i) => i === 0 ? s : s.substring(0, 1).toUpperCase() + s.substring(1)).join('');
 }
