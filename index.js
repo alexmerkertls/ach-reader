@@ -16,7 +16,7 @@ document.querySelector('input#achFile').addEventListener('change', (evt) => {
 const ACH_SPEC = {
   '1': [ // file header
     { key: 'priorityCode', name: 'Priority Code', length: 2, pattern: /^01$/, static: true },
-    { key: 'destination', name: 'Immediate Destination', length: 10, pattern: /^\s[0-9]{9}$/, static: true },
+    { key: 'destination', name: 'Immediate Destination', length: 10, pattern: /^\s[0-9]{9}$/ },
     { key: 'origin', name: 'Immediate Origin', length: 10 },
     { key: 'creationDate', name: 'File Creation Date', length: 6 },
     { key: 'creationTime', name: 'File Creation Time', length: 4 },
@@ -96,9 +96,9 @@ function getRecordDefinition(recordTypeCode, padding) {
 
 function parseAchFile(contents) {
   const lines = contents.split('\r').join('').split('\n'); // make sure to remove carriage returns (\r)
-  return lines.filter(x => x).map((line) => {
+  return lines.filter(x => x).map((line, index) => {
     const recordTypeCode = line.substring(0, 1);
-    const record = { recordTypeCode };
+    const record = { line: index, recordTypeCode };
     const fields = getRecordDefinition(recordTypeCode, line.match(/^9*$/));
     if (!fields) {
       console.warn(`Unknown Record Type ${recordTypeCode}, skipping...`);
@@ -113,21 +113,70 @@ function parseAchFile(contents) {
   }).filter(x => x); // get rid of null lines
 }
 
-function renderAchFile(achFile) {
-  console.log(achFile);
-  const contents = achFile.map((record) => {
-    const fields = getRecordDefinition(record.recordTypeCode, record.padding);
-    console.log(record.recordTypeCode, record.padding, fields);
-    const line = fields.map((field) => {
-      const value = record[field.key];
-      return renderField(value, record, field);
-    });
-    return `<div>${renderField(record.recordTypeCode, record, { name: 'Record Type Code', length: 1, static: true })}${line.join('')}</div>`;
-  }).join('');
-  document.querySelector('div#contents').innerHTML = contents;
+function onFieldFocus(evt) {
+  const input = evt.target;
+  console.log(evt);
 }
+
+function onFieldHover(evt) {
+  const input = evt.target;
+  const tooltip = document.querySelector('div#tooltip');
+  const { top, height } = input.getBoundingClientRect();
+  const attrs = extractAttributes(input, ['data-name', 'data-field-length']);
+  tooltip.style.visibility = 'visible';
+  tooltip.style.left = evt.x;
+  tooltip.style.top = top + height;
+  tooltip.innerHTML = `${attrs['data-name']} (${attrs['data-field-length']} char${attrs['data-field-length'] == 1 ? 's' : ''})`;
+  evt.stopPropagation();
+}
+
+function renderAchFile(achFile) {
+  const container = document.createElement('div');
+  achFile.forEach((record) => {
+    const fields = getRecordDefinition(record.recordTypeCode, record.padding);
+    const row = createElementFromHTML('<div class="row"></div>');
+    row.appendChild(renderField(record.recordTypeCode, record, { name: 'Record Type Code', length: 1, static: true }));
+    fields.forEach((field) => {
+      const value = record[field.key];
+      const input = renderField(value, record, field);
+      row.appendChild(input);
+    });
+    container.appendChild(row);
+  });
+  container.addEventListener('focus', onFieldFocus, true);
+  container.addEventListener('mouseover', onFieldHover, true);
+  document.querySelector('div#contents').appendChild(container);
+}
+const CHAR_WIDTH = 12;
 
 function renderField(value, record, field) {
   const { length, static, name } = field;
-  return `<input type="text" style="width: ${ 8 * length }px" value="${value}" ${static ? 'readonly' : ''} />`;
+  return createElementFromHTML(`
+    <input
+      type="text"
+      style="width: ${ CHAR_WIDTH * length }px"
+      value="${value}" ${static ? 'readonly' : ''}
+      data-name="${field.name}"
+      data-record-type="${record.recordTypeCode}"
+      data-field-length="${field.length}"
+      data-record-line="${record.line}"
+      data-field="${field.key}"
+    />`);
+}
+
+function createElementFromHTML(htmlString) {
+  var div = document.createElement('div');
+  div.innerHTML = htmlString.replace(/\s/g, ' ').trim();
+  const child = div.childNodes[0];
+  div.removeChild(child);
+  return child;
+}
+
+function extractAttributes(element, attributes) {
+  return attributes.reduce((obj, attribute) => {
+    return {
+      ...obj,
+      [attribute]: element.getAttribute(attribute),
+    };
+  }, {});
 }

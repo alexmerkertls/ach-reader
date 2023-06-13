@@ -10,15 +10,25 @@
       outline: #bbb solid 1px;
       padding: 0;
       font-family: monospace;
+      font-size: 1.25rem;
     }
     input:read-only {
       background: #ddd;
     }
-    div#contents > div {
+    div#contents .row {
       margin-top: 5px;
+    }
+    div#tooltip {
+      visibility: hidden;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #ffb;
+      padding: 2px;
     }
 </style>
   <div id="contents"></div>
   <script src="./index.js"></script>
+  <div id="tooltip"></div>
 </body>
 </html>
