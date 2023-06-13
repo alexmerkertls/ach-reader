@@ -1,9 +1,6 @@
 <html>
 <head>
-  <title>ACH File Reader</title>
-</head>
-<body>
-  <input id="achFile" type="file" />
+  <title>ACH File Reader/Editor</title>
   <style>
     input[type="text"] {
       border: none;
@@ -15,6 +12,10 @@
     input:read-only {
       background: #ddd;
     }
+    input[data-error] {
+      outline-color: #f05;
+      background: #fcc;
+    }
     div#contents .row {
       margin-top: 5px;
     }
@@ -23,11 +24,19 @@
       position: fixed;
       left: 0;
       top: 0;
-      background: #ffb;
       outline: #bbb solid 1px;
       padding: 2px;
     }
 </style>
+</head>
+<body>
+  <h3>ACH File Reader/Editor</h3>
+  <div>
+    <input id="achFile" type="file" />
+    <button id="reload">Reload File</button>
+    <button id="reset">Reset Errors</button>
+    <button id="save">Save</button>
+  </div>
   <div id="contents"></div>
   <script src="./index.js"></script>
   <div id="tooltip"></div>
