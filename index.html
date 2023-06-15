@@ -18,6 +18,7 @@
     }
     div#contents .row {
       margin-top: 5px;
+      position: relative;
     }
     div#tooltip {
       visibility: hidden;
@@ -27,6 +28,24 @@
       outline: #bbb solid 1px;
       padding: 2px;
     }
+
+    div[data-record-type="5"],
+    div[data-record-type="8"] {
+      margin-left: 12px;
+    }
+
+    div[data-record-type="6"],
+    div[data-record-type="7"] {
+      margin-left: 24px;
+    }
+
+    button {
+      display: inline-block;
+      position: relative;
+      margin-left: 5px;
+      top: -2px;
+    }
+
     div#footer {
       position: fixed;
       bottom: 0;
@@ -37,6 +56,7 @@
   <h3>ACH File Reader/Editor</h3>
   <div>
     <input id="achFile" type="file" />
+    <button id="new">New File</button>
     <button id="reload">Reload File</button>
     <button id="reset">Reset Errors</button>
     <button id="save">Save</button>
