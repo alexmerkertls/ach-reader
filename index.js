@@ -48,14 +48,14 @@ const PATTERN = {
 function findBatchRecords(entryLine) {
   // first find the batch start
   let batchStart = null;
-  for (let i = entryLine - 1; !batchStart; i -= 1) {
+  for (let i = entryLine - 1; !batchStart && i > 0; i -= 1) {
     if (achFile[i].recordTypeCode === RECORD_TYPE_CODES.BATCH_HEADER) {
       batchStart = i;
     }
   }
   // then find the batch end
   let batchEnd = null;
-  for (let j = entryLine + 1; !batchEnd; j += 1) {
+  for (let j = entryLine + 1; !batchEnd && j < achFile.length; j += 1) {
     if (achFile[j].recordTypeCode === RECORD_TYPE_CODES.BATCH_TRAILER) {
       batchEnd = j
     }
@@ -71,21 +71,15 @@ function recalculateHash(achFile, record) {
 
   // calculate batch entry hash and set value
   const batchEntryHash = entries.reduce((sum, entry) => sum + parseInt(entry.receivingDfiId), 0);
-  const batchEntryHashField = ACH_SPEC[RECORD_TYPE_CODES.BATCH_TRAILER].find(f => f.key == 'entryHash');
-  const batchEntryHashValidated = validate(batchEntryHashField, batchEntryHash.toString());
-  achFile[batchEnd].entryHash = batchEntryHashValidated;
-  document.querySelector(`div#record-${batchEnd}>input[data-field-key="entryHash"]`).value = batchEntryHashValidated;
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'entryHash', batchEntryHash);
 
   // collect all of the batch trailers
   const batchTrailers = achFile.filter(rec => rec.recordTypeCode == RECORD_TYPE_CODES.BATCH_TRAILER);
+  const fileTrailerRecord = achFile.find(rec => rec.recordTypeCode == RECORD_TYPE_CODES.FILE_TRAILER);
 
   // calculate total file entry hash and set value
   const fileEntryHash = batchTrailers.reduce((sum, trailer) => sum + parseInt(trailer.entryHash), 0);
-  const fileEntryHashField = ACH_SPEC[RECORD_TYPE_CODES.FILE_TRAILER].find(f => f.key == 'entryHash');
-  const fileEntryHashValidated = validate(fileEntryHashField, fileEntryHash.toString());
-  const fileTrailerRecord = achFile.find(rec => rec.recordTypeCode == RECORD_TYPE_CODES.FILE_TRAILER);
-  fileTrailerRecord.entryHash = fileEntryHashValidated;
-  document.querySelector(`div#record-${fileTrailerRecord.line}>input[data-field-key="entryHash"]`).value = fileEntryHashValidated;
+  updateField(fileTrailerRecord.line, RECORD_TYPE_CODES.FILE_TRAILER, 'entryHash', fileEntryHash);
 }
 
 function recalculateTotals(achFile, record) {
@@ -103,15 +97,8 @@ function recalculateTotals(achFile, record) {
     };
   }, { c: 0, d: 0 });
 
-  const batchTotalCreditsField = ACH_SPEC[RECORD_TYPE_CODES.BATCH_TRAILER].find(f => f.key == 'totalCredits');
-  const batchTotalCreditsValidated = validate(batchTotalCreditsField, batchTotalCredits.toString());
-  achFile[batchEnd].totalCredits = batchTotalCreditsValidated;
-  document.querySelector(`div#record-${batchEnd}>input[data-field-key="totalCredits"]`).value = batchTotalCreditsValidated;
-  
-  const batchTotalDebitsField = ACH_SPEC[RECORD_TYPE_CODES.BATCH_TRAILER].find(f => f.key == 'totalDebits');
-  const batchTotalDebitsValidated = validate(batchTotalDebitsField, batchTotalDebits.toString());
-  achFile[batchEnd].totalDebits = batchTotalDebitsValidated;
-  document.querySelector(`div#record-${batchEnd}>input[data-field-key="totalDebits"]`).value = batchTotalDebitsValidated;
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'totalCredits', batchTotalCredits);
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'totalDebits', batchTotalDebits);
 
   // collect all of the batch trailers
   const batchTrailers = achFile.filter(rec => rec.recordTypeCode == RECORD_TYPE_CODES.BATCH_TRAILER);
@@ -119,16 +106,51 @@ function recalculateTotals(achFile, record) {
 
   // calculate total file amounts and set values
   const fileTotalCredits = batchTrailers.reduce((sum, trailer) => sum + parseInt(trailer.totalCredits), 0);
-  const fileTotalCreditsField = ACH_SPEC[RECORD_TYPE_CODES.FILE_TRAILER].find(f => f.key == 'totalCredits');
-  const fileTotalCreditsValidated = validate(fileTotalCreditsField, fileTotalCredits.toString());
-  fileTrailerRecord.totalCredits = fileTotalCreditsValidated;
-  document.querySelector(`div#record-${fileTrailerRecord.line}>input[data-field-key="totalCredits"]`).value = fileTotalCreditsValidated;
+  updateField(fileTrailerRecord.line, RECORD_TYPE_CODES.FILE_TRAILER, 'totalCredits', fileTotalCredits);
 
   const fileTotalDebits = batchTrailers.reduce((sum, trailer) => sum + parseInt(trailer.totalDebits), 0);
-  const fileTotalDebitsField = ACH_SPEC[RECORD_TYPE_CODES.FILE_TRAILER].find(f => f.key == 'totalDebits');
-  const fileTotalDebitsValidated = validate(fileTotalDebitsField, fileTotalDebits.toString());
-  fileTrailerRecord.totalDebits = fileTotalDebitsValidated;
-  document.querySelector(`div#record-${fileTrailerRecord.line}>input[data-field-key="totalDebits"]`).value = fileTotalDebitsValidated;
+  updateField(fileTrailerRecord.line, RECORD_TYPE_CODES.FILE_TRAILER, 'totalDebits', fileTotalDebits);
+}
+
+function recalculateServiceClass(achFile, record) {
+  const [batchStart, batchEnd] = findBatchRecords(record.line);
+  const entries = achFile.slice(batchStart + 1, batchEnd).filter(rec => rec.recordTypeCode == RECORD_TYPE_CODES.ENTRY);
+
+  // calculate total amounts and set values
+  const { c: batchTotalCredits, d: batchTotalDebits } = entries.reduce((obj, entry) => {
+    const key = isCredit(entry.transactionCode) ? 'c' : 'd';
+    return {
+      ...obj,
+      [key]: obj[key] + 1,
+    };
+  }, { c: 0, d: 0 });
+
+  let serviceClass = '200';
+  if (batchTotalCredits == 0) serviceClass = '225';
+  if (batchTotalDebits == 0) serviceClass = '220';
+
+  updateField(batchStart, RECORD_TYPE_CODES.BATCH_HEADER, 'serviceClass', serviceClass);
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'serviceClass', serviceClass);
+}
+
+function updateOdfi(achFile, record) {
+  // this is the batch header being updated
+  const [_, batchEnd] = findBatchRecords(record.line);
+  const entries = achFile.slice(record.line + 1, batchEnd).filter(rec => rec.recordTypeCode == RECORD_TYPE_CODES.ENTRY);
+  entries.forEach((entry, index) => updateField(entry.line, entry.recordTypeCode, 'traceNumber', record.originatingDfiId + index.toString().padStart(7, '0')));
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'originatingDfiId', record.originatingDfiId);
+}
+
+function updateCompanyId(achFile, record) {
+  const [_, batchEnd] = findBatchRecords(record.line);
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'companyId', record.companyId);
+}
+
+function updateField(recordLine, recordTypeCode, key, value) {
+  const field = ACH_SPEC[recordTypeCode].find(f => f.key == key);
+  const okValue = validate(field, value.toString());
+  achFile[recordLine][key] = okValue;
+  document.querySelector(`div#record-${recordLine}>input[data-field-key="${key}"]`).value = okValue;
 }
 
 const RECORD_TYPE_CODES = {
@@ -203,13 +225,43 @@ const TRANSACTION_CODES = {
   '88': 'Summary debit for respondent ACH activity',
 };
 
+const SERVICE_CLASS_CODES = {
+  '200': 'Mixed Credits and Debits',
+  '220': 'Credits Only',
+  '225': 'Debits Only',
+};
+
+const FORMAT = {
+  MONEY: (amount) => (`\$${parseInt(amount) / 100}`),
+  DATE: (date) => {
+    const { groups: { year, month, day } } = date.match(/^(?<year>\d{2})(?<month>\d{2})(?<day>\d{2})$/);
+    return `${month}/${day}/20${year}`;
+  },
+  TIME: (time) => {
+    let { groups: { hour, minute } } = time.match(/^(?<hour>\d{2})(?<minute>\d{2})$/);
+    let ampm = 'am';
+    let hourNum = parseInt(hour);
+    if (hourNum > 11) {
+      ampm = 'pm'
+      if (hourNum > 12) {
+        hour = (hourNum - 12).toString();
+      }
+    } else if (hourNum == 0) {
+      hour = '12';
+    }
+    return `${hour}:${minute} ${ampm}`;
+  }
+};
+
 const ACH_SPEC = {
   [RECORD_TYPE_CODES.FILE_HEADER]: [
     { key: 'priorityCode', name: 'Priority Code', length: 2, pattern: /^01$/, static: true, required: true},
-    { key: 'destination', name: 'Immediate Destination', length: 10, pattern: /^ [0-9]{9}$/, required: true },
-    { key: 'origin', name: 'Immediate Origin', length: 10, pattern: /^ [0-9]{9}$/, required: true },
-    { key: 'creationDate', name: 'File Creation Date', length: 6, pattern: PATTERN.DATE, required: true },
-    { key: 'creationTime', name: 'File Creation Time', length: 4, pattern: PATTERN.TIME },
+    { key: 'destinationSpace', name: 'Space prefix for Immediate Destination', length: 1, pattern: /^ $/, static: true, required: true },
+    { key: 'destination', name: 'Immediate Destination', length: 9, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'originSpace', name: 'Space prefix for Immediate Origin', length: 1, pattern: /^ $/, static: true, required: true },
+    { key: 'origin', name: 'Immediate Origin', length: 9, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'creationDate', name: 'File Creation Date', length: 6, pattern: PATTERN.DATE, required: true, format: FORMAT.DATE },
+    { key: 'creationTime', name: 'File Creation Time', length: 4, pattern: PATTERN.TIME, format: FORMAT.TIME },
     { key: 'idModifier', name: 'File ID Modifier', length: 1, pattern: PATTERN.ALPHANUMERIC, required: true }, 
     { key: 'recordSize', name: 'Record Size', length: 3, pattern: /^094$/, static: true, required: true },
     { key: 'blockingFactor', name: 'Blocking Factor', length: 2, pattern: /^10$/, static: true, required: true },
@@ -219,51 +271,51 @@ const ACH_SPEC = {
     { key: 'referenceCode', name: 'Reference Code', length: 8, pattern: PATTERN.ALPHANUMERIC },
   ],
   [RECORD_TYPE_CODES.FILE_TRAILER]: [
-    { key: 'batchCount', name: 'Batch Count', length: 6, pattern: PATTERN.NUMERIC, required: true },
-    { key: 'blockCount', name: 'Block Count', length: 6, pattern: PATTERN.NUMERIC, required: true },
-    { key: 'entryCount', name: 'Entry/Addenda Count', length: 8, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'batchCount', name: 'Batch Count', length: 6, pattern: PATTERN.NUMERIC, required: true, static: true },
+    { key: 'blockCount', name: 'Block Count', length: 6, pattern: PATTERN.NUMERIC, required: true, static: true },
+    { key: 'entryCount', name: 'Entry/Addenda Count', length: 8, pattern: PATTERN.NUMERIC, required: true, static: true },
     { key: 'entryHash', name: 'Entry Hash', length: 10, pattern: PATTERN.NUMERIC, required: true, static: true },
-    { key: 'totalDebits', name: 'Total Debit Entry Dollar Amount in File', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true },
-    { key: 'totalCredits', name: 'Total Credit Entry Dollar Amount in File', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true },
+    { key: 'totalDebits', name: 'Total Debit Entry Dollar Amount in File', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true, format: FORMAT.MONEY },
+    { key: 'totalCredits', name: 'Total Credit Entry Dollar Amount in File', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true, format: FORMAT.MONEY },
     { key: 'reserved', name: 'Reserved', length: 39, pattern: /^ {39}$/, static: true, required: true },
   ],
   [RECORD_TYPE_CODES.BATCH_HEADER]: [
-    { key: 'serviceClass', name: 'Service Class Code', length: 3, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'serviceClass', name: 'Service Class Code', length: 3, pattern: PATTERN.NUMERIC, static: true, required: true, context: SERVICE_CLASS_CODES },
     { key: 'companyName', name: 'Company Name', length: 16, pattern: PATTERN.ALPHANUMERIC, required: true },
     { key: 'companyDiscData', name: 'Company Discretionary Data', length: 20, pattern: PATTERN.ALPHANUMERIC },
-    { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true },
+    { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true, onChange: updateCompanyId },
     { key: 'standardEntryClass', name: 'Standard Entry Class Code', length: 3, pattern: PATTERN.ALPHANUMERIC, required: true },
     { key: 'companyEntryDesc', name: 'Company Entry Description', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true },
     { key: 'companyDescDate', name: 'Company Entry Description', length: 6, pattern: PATTERN.ALPHANUMERIC },
-    { key: 'effectiveEntryDate', name: 'Effective Entry Date', length: 6, pattern: PATTERN.DATE },
-    { key: 'settlementDate', name: 'Settlement Date', length: 3, pattern: PATTERN.NUMERIC },
+    { key: 'effectiveEntryDate', name: 'Effective Entry Date', length: 6, pattern: PATTERN.DATE, format: FORMAT.DATE },
+    { key: 'settlementDate', name: 'Settlement Date', length: 3, pattern: /^\d{3}$/ },
     { key: 'originatorStatus', name: 'Originator Status Code', length: 1, pattern: PATTERN.ALPHANUMERIC },
-    { key: 'originatingDfiId', name: 'Originating DFI Identification', length: 8, pattern: PATTERN.NUMERIC },
-    { key: 'batchNumber', name: 'Batch Number', length: 7 },
+    { key: 'originatingDfiId', name: 'Originating DFI Identification', length: 8, pattern: PATTERN.NUMERIC, onChange: updateOdfi },
+    { key: 'batchNumber', name: 'Batch Number', length: 7, pattern: PATTERN.NUMERIC, required: true, static: true },
   ],
   [RECORD_TYPE_CODES.BATCH_TRAILER]: [
-    { key: 'serviceClass', name: 'Service Class Code', length: 3, pattern: PATTERN.NUMERIC, required: true },
-    { key: 'entryCount', name: 'Entry/Addenda Count', length: 6, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'serviceClass', name: 'Service Class Code', length: 3, pattern: PATTERN.NUMERIC, static: true, required: true, context: SERVICE_CLASS_CODES },
+    { key: 'entryCount', name: 'Entry/Addenda Count', length: 6, pattern: PATTERN.NUMERIC, required: true, static: true },
     { key: 'entryHash', name: 'Entry Hash', length: 10, pattern: PATTERN.NUMERIC, required: true, static: true },
-    { key: 'totalDebits', name: 'Total Debit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true },
-    { key: 'totalCredits', name: 'Total Credit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true },
-    { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true },
+    { key: 'totalDebits', name: 'Total Debit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true, format: FORMAT.MONEY },
+    { key: 'totalCredits', name: 'Total Credit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, required: true, static: true, format: FORMAT.MONEY },
+    { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true, static: true },
     { key: 'messageAuthCode', name: 'Message Authentication Code', length: 19 , pattern: PATTERN.NUMERIC},
     { key: 'reserved', name: 'Reserved', length: 6, pattern: /$ {6}$/, static: true, required: true },
-    { key: 'originatingDfiId', name: 'Originating DFI Identification', length: 8, pattern: PATTERN.NUMERIC, required: true },
-    { key: 'batchNumber', name: 'Batch Number', length: 7, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'originatingDfiId', name: 'Originating DFI Identification', length: 8, pattern: PATTERN.NUMERIC, required: true, static: true },
+    { key: 'batchNumber', name: 'Batch Number', length: 7, pattern: PATTERN.NUMERIC, required: true, static: true },
   ],
   [RECORD_TYPE_CODES.ENTRY] : [ // CCD and PPD entries (WEB and TEL are very similar)
-    { key: 'transactionCode', name: 'Transaction Code', length: 2, pattern: PATTERN.NUMERIC, required: true, context: TRANSACTION_CODES },
+    { key: 'transactionCode', name: 'Transaction Code', length: 2, pattern: PATTERN.NUMERIC, required: true, context: TRANSACTION_CODES, onChange: recalculateServiceClass },
     { key: 'receivingDfiId', name: 'Receiving DFI Identification', length: 8, pattern: PATTERN.NUMERIC, required: true, onChange: recalculateHash },
     { key: 'checkDigit', name: 'Check Digit', length: 1, pattern: PATTERN.NUMERIC, required: true },
     { key: 'dfiAcctNumber', name: 'DFI Account Number', length: 17, pattern: PATTERN.ALPHANUMERIC, required: true },
-    { key: 'amount', name: 'Amount', length: 10, pattern: PATTERN.NUMERIC, required: true, onChange: recalculateTotals },
+    { key: 'amount', name: 'Amount', length: 10, pattern: PATTERN.NUMERIC, required: true, onChange: recalculateTotals, format: FORMAT.MONEY },
     { key: 'idNumber', name: 'Identification Number', length: 15, pattern: PATTERN.ALPHANUMERIC },
     { key: 'receivingName', name: 'Receiving Individual/Company Name', length: 22, pattern: PATTERN.ALPHANUMERIC, required: true },
     { key: 'discData', name: 'Discretionary Data', length: 2, pattern: PATTERN.ALPHANUMERIC }, // could also be payment type code
     { key: 'addendaRecordId', name: 'Addenda Record Indicator', length: 1, pattern: PATTERN.NUMERIC, required: true },
-    { key: 'traceNumber', name: 'Trace Number', length: 15, pattern: PATTERN.NUMERIC, required: true },
+    { key: 'traceNumber', name: 'Trace Number', length: 15, pattern: PATTERN.NUMERIC, required: true, static: true },
   ],
   [RECORD_TYPE_CODES.ADDENDUM] : [
     { key: 'addendaType', name: 'Addenda Type Code', length: 2, pattern: /^05$/, required: true },
@@ -330,6 +382,14 @@ function writeAchFile(achFile) {
 
 function onFieldFocus(evt) {
   const input = evt.target;
+  const { recordLine, fieldKey } = extractAttributes(input, ['data-record-line', 'data-field-key']);
+  const lineNum = parseInt(recordLine);
+  const record = achFile.find(rec => rec.line === lineNum);
+  if (record) {
+    const field = getRecordDefinition(record.recordTypeCode, record.padding).find(fld => fld.key === fieldKey);
+    if (field.pattern == PATTERN.ALPHANUMERIC) input.value = input.value.trim();
+    if (field.pattern == PATTERN.NUMERIC) input.value = parseInt(input.value).toString();
+  }
   evt.stopPropagation();
 }
 
@@ -358,6 +418,14 @@ function onFieldChange(evt) {
 
 function onFieldBlur(evt) {
   const input = evt.target;
+  const { recordLine, fieldKey } = extractAttributes(input, ['data-record-line', 'data-field-key']);
+  const lineNum = parseInt(recordLine);
+  const record = achFile.find(rec => rec.line === lineNum);
+  if (record) {
+    const field = getRecordDefinition(record.recordTypeCode, record.padding).find(fld => fld.key === fieldKey);
+    if (field.pattern == PATTERN.ALPHANUMERIC) input.value = input.value.padEnd(field.length, ' ');
+    if (field.pattern == PATTERN.NUMERIC) input.value = input.value.padStart(field.length, '0');
+  }
   evt.stopPropagation();
 }
 
@@ -374,10 +442,20 @@ function showTooltip(evt) {
     tooltip.style.top = top + height + 1; // for the outline
     if (fieldKey == 'padding') {
       tooltip.innerHTML = 'FILE PADDING';
+    } else if (fieldKey == 'recordTypeCode') {
+      tooltip.innerHTML = Object.keys(RECORD_TYPE_CODES).find(k => RECORD_TYPE_CODES[k] == recordType).toString().replace('_', ' ');
     } else {
-      tooltip.innerHTML = `<div>${name} (${fieldLength} char${fieldLength == 1 ? '' : 's'})</div>
-      <div>${input.value} ${field.context ? `= ${field.context[input.value]}` : ''}</div>
-      ${error ? `<div>${error}</div>` : ''}`;
+      tooltip.innerHTML = `
+        <div>
+          ${name} (${fieldLength} char${fieldLength == 1 ? '' : 's'})
+        </div>
+        <div>
+          ${input.value}
+          ${field.context ? `= ${field.context[input.value]}` : ''}
+          ${field.format ? `= ${field.format(input.value)}` : ''}
+        </div>
+        ${error ? `<div>${error}</div>` : ''}
+      `;
     }
   } else {
     tooltip.style.visibility = 'hidden';
@@ -392,7 +470,7 @@ function renderAchFile(achFile) {
   achFile.forEach((record) => {
     const fields = getRecordDefinition(record.recordTypeCode, record.padding);
     const row = createElementFromHTML(`<div id="record-${record.line}" class="row"></div>`);
-    row.appendChild(renderField(record.recordTypeCode, record, { name: 'Record Type Code', length: 1, static: true }));
+    row.appendChild(renderField(record.recordTypeCode, record, { name: 'Record Type Code', length: 1, static: true, key: 'recordTypeCode' }));
     fields.forEach((field) => {
       const value = record[field.key];
       const input = renderField(value, record, field);
@@ -402,15 +480,19 @@ function renderAchFile(achFile) {
   });
 
   container.addEventListener('change', onFieldChange, true);
-  // container.addEventListener('focus', onFieldFocus, true);
-  // container.addEventListener('blur', onFieldBlur, true);
+  container.addEventListener('focus', onFieldFocus, true);
+  container.addEventListener('blur', onFieldBlur, true);
   document.body.addEventListener('mousemove', showTooltip, true);
 
   document.querySelector('div#contents').appendChild(container);
 }
 const CHAR_WIDTH = 12;
 
-function renderField(value, record, field) {
+function renderAttributes(attrs = {}) {
+  return Object.entries(attrs).map((key, value) => `${camelCaseToDelimiterCase(key)}="${value}"`).join('\n');
+}
+
+function renderField(value, record, field, attrs) {
   const { length, static, name } = field;
   return createElementFromHTML(`
     <input
@@ -422,6 +504,7 @@ function renderField(value, record, field) {
       data-field-length="${field.length}"
       data-record-line="${record.line}"
       data-field-key="${field.key}"
+      ${renderAttributes(attrs)}
     />`);
 }
 
@@ -438,11 +521,15 @@ function extractAttributes(element, attributes, preserveDataPrefix = false) {
     const attrName = preserveDataPrefix ? attribute : attribute.replace('data-', '');
     return {
       ...obj,
-      [snakeToCamelCase(attrName)]: element.getAttribute(attribute),
+      [delimiterCaseToCamelCase(attrName)]: element.getAttribute(attribute),
     };
   }, {});
 }
 
-function snakeToCamelCase(str) {
-  return str.split('-').map((s, i) => i === 0 ? s : s.substring(0, 1).toUpperCase() + s.substring(1)).join('');
+function delimiterCaseToCamelCase(str, delimiter = '-') {
+  return str.split(delimiter).map((s, i) => i === 0 ? s : s.substring(0, 1).toUpperCase() + s.substring(1)).join('');
+}
+
+function camelCaseToDelimiterCase(str, delimiter = '-') {
+  return str.replace(/[A-Z]/g, c => `${delimiter}${c.toLowerCase()}`);
 }
