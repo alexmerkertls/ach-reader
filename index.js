@@ -77,6 +77,7 @@ document.querySelector('button#save').addEventListener('click', () => {
   a.href = url;
   a.download = fileName;
   a.click();
+  document.body.removeChild(a);
   window.URL.revokeObjectURL(url);
 });
 
@@ -86,6 +87,25 @@ const PATTERN = {
   DATE: /^[0-9]{6}$/,
   TIME: /^[0-9]{4}$/,
 };
+
+function updateField(recordLine, recordTypeCode, key, value) {
+  const input = document.querySelector(`div#record-${recordLine}>input[data-field-key="${key}"]`);
+  try {
+    const field = ACH_SPEC[recordTypeCode].find(f => f.key == key);
+    const okValue = validate(field, value.toString());
+    input.removeAttribute('data-error');
+    // now we can save this value
+    const record = achFile[recordLine];
+    record[key] = okValue;
+    input.value = okValue; // we don't always have to do this but we should
+    if (field.onChange) {
+      field.onChange(achFile, record, field);
+    }
+  } catch (ex) {
+    console.error(`Error on line ${parseInt(recordLine) + 1}: ${ex.message}`);
+    input.setAttribute('data-error', ex.message);
+  }
+}
 
 function findBatchRecords(entryLine) {
   // first find the batch start
@@ -186,13 +206,6 @@ function updateOdfi(achFile, record) {
 function updateCompanyId(achFile, record) {
   const [_, batchEnd] = findBatchRecords(record.line);
   updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'companyId', record.companyId);
-}
-
-function updateField(recordLine, recordTypeCode, key, value) {
-  const field = ACH_SPEC[recordTypeCode].find(f => f.key == key);
-  const okValue = validate(field, value.toString());
-  achFile[recordLine][key] = okValue;
-  document.querySelector(`div#record-${recordLine}>input[data-field-key="${key}"]`).value = okValue;
 }
 
 const RECORD_TYPE_CODES = {
@@ -447,16 +460,7 @@ function onFieldChange(evt) {
     if (record) {
       // validate data based on pattern
       const field = getRecordDefinition(record.recordTypeCode, record.padding).find(fld => fld.key === fieldKey);
-      try {
-        const okValue = validate(field, input.value);
-        input.removeAttribute('data-error');
-        // now we can save this value
-        record[fieldKey] = okValue;
-        if (field.onChange) field.onChange(achFile, record, field, previous);
-      } catch (ex) {
-        console.error(`Error on line ${lineNum + 1}: ${ex.message}`);
-        input.setAttribute('data-error', ex.message);
-      }
+      updateField(record.line, record.recordTypeCode, fieldKey, input.value);
     }
     evt.stopPropagation();
   } 
@@ -477,6 +481,86 @@ function onFieldBlur(evt) {
   }
 }
 
+const TRANCODE_ACCOUNT = {
+  'checking': '2',
+  'savings': '3',
+  'general ledger': '4',
+  'loan account': '5',
+};
+
+const getTrancodeType = (type, accountType) => {
+  // 'credit': '2',
+  // 'debit': '7',
+  if (type == 'credit') {
+    return '2';
+  }
+  if (type == 'debit') {
+    if (accountType == 'loan account') {
+      return '5'; // reversals only
+    }
+    return '7';
+  }
+  return '?';
+};
+
+function parseAndLoadTransactions(text, batchStartLine) {
+  const lines = text.split('\r').join('').split('\n').slice(1); // make sure to remove carriage returns (\r)
+  const fields = ACH_SPEC[RECORD_TYPE_CODES.ENTRY];
+  const transactions = lines.map((line, index) => {
+    const [
+      type,
+      idNumber,
+      amountText,
+      routingNumber,
+      dfiAcctNumber,
+      accountType,
+      institutionName,
+    ] = line.split(',');
+    const transactionCode = `${TRANCODE_ACCOUNT[accountType]}${getTrancodeType(type, accountType)}`
+    const receivingDfiId = routingNumber.substring(0, 8);
+    const checkDigit = routingNumber.substring(8, 9);
+    const receivingName = institutionName.substring(0, 22);
+    const amount = (parseInt(amountText) * 100).toString();
+    return {
+      recordTypeCode: RECORD_TYPE_CODES.ENTRY,
+      transactionCode,
+      receivingDfiId,
+      checkDigit,
+      dfiAcctNumber,
+      amount,
+      idNumber,
+      receivingName,
+      discData: '',
+      addendaRecordId: '0',
+      traceNumber: `${receivingDfiId}${(index + 1).toString().padStart(7, '0')}`,
+    };
+  });
+  achFile.splice(batchStartLine + 1, 0, ...transactions);
+  // re-number lines
+  achFile.forEach((record, index) => record.line = index);
+  const batchEnd = batchStartLine + transactions.length + 1;
+  renderAchFile(achFile);
+  updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'entryCount', transactions.length.toString());
+}
+
+function loadAchTransactions(batchStartLine) {
+  const fileElement = createElementFromHTML(`<input type="file" style="display: none;" />`);
+  document.body.appendChild(fileElement);
+  fileElement.addEventListener('change', () => {
+    const file = fileElement.files[0];
+    const fr = new FileReader();
+    fr.readAsText(file);
+    fr.onload = () => {
+      parseAndLoadTransactions(fr.result, batchStartLine);
+    }
+    fr.onerror = () => {
+      console.log(fr.error);
+    }
+  });
+  fileElement.click();
+  document.body.removeChild(fileElement);
+}
+
 function onClick(evt) {
   const button = evt.target;
   if (button.nodeName == 'BUTTON') {
@@ -487,8 +571,7 @@ function onClick(evt) {
         console.log('heyyyy');
         break;
       case RECORD_TYPE_CODES.BATCH_HEADER:
-        console.log('heyyyy');
-        alert('Coming soon - create a new file and load transactions from a CSV');
+        loadAchTransactions(parseInt(recordLine));
         break;
       case RECORD_TYPE_CODES.BATCH_TRAILER:
         console.log('heyyyy');
@@ -553,10 +636,10 @@ function renderAchFile(achFile) {
       >
       </div>
     `);
-    row.appendChild(renderField(record.recordTypeCode, record, { name: 'Record Type Code', length: 1, static: true, key: 'recordTypeCode' }));
+    row.appendChild(renderField(record, { name: 'Record Type Code', length: 1, static: true, key: 'recordTypeCode' }, { value: record.recordTypeCode }));
     fields.forEach((field) => {
       const value = record[field.key];
-      const input = renderField(value, record, field);
+      const input = renderField(record, field, { value });
       row.appendChild(input);
     });
     let button = null;
@@ -596,25 +679,35 @@ function renderAchFile(achFile) {
   document.body.addEventListener('mousemove', showTooltip, true);
 
   document.querySelector('div#contents').appendChild(container);
+
+  // validate all fields
+  achFile.filter(r => !r.padding).forEach((record) => {
+    const fields = getRecordDefinition(record.recordTypeCode, record.padding);
+    fields.forEach((field) => {
+      const value = record[field.key];
+      updateField(record.line, record.recordTypeCode, field.key, value);
+    });
+  });
 }
 const CHAR_WIDTH = 12;
 
 function renderAttributes(attrs = {}) {
-  return Object.entries(attrs).map((key, value) => `${camelCaseToDelimiterCase(key)}="${value}"`).join('\n');
+  return Object.entries(attrs).map(([key, value]) => `${camelCaseToDelimiterCase(key)}="${value}"`).join('\n');
 }
 
-function renderField(value, record, field, attrs) {
-  const { length, static, name } = field;
+function renderField(record, field, attrs = {}) {
+  const { length, static, name, key, required } = field;
   return createElementFromHTML(`
     <input
       type="text"
       style="width: ${ CHAR_WIDTH * length }px"
-      value="${value}" ${static ? 'readonly' : ''}
-      data-name="${field.name}"
+      ${static ? 'readonly' : ''}
+      ${required ? 'required' : ''}
+      data-name="${name}"
       data-record-type="${record.recordTypeCode}"
-      data-field-length="${field.length}"
+      data-field-length="${length}"
       data-record-line="${record.line}"
-      data-field-key="${field.key}"
+      data-field-key="${key}"
       ${renderAttributes(attrs)}
     />`);
 }
