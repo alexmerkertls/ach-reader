@@ -46,7 +46,7 @@ const newFile = () => {
     createEmptyRecord(RECORD_TYPE_CODES.BATCH_HEADER, 1),
     createEmptyRecord(RECORD_TYPE_CODES.BATCH_TRAILER, 2),
     createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, 3),
-    ...(new Array(7).fill(0).map((_, line) => createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, line + 4, true))),
+    ...(new Array(4).fill(0).map((_, line) => createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, line + 4, true))),
   ];
   renderAchFile(achFile);
 }
@@ -541,7 +541,7 @@ function parseAndLoadTransactions(text, batchStartLine) {
   const batchEnd = batchStartLine + transactions.length + 1;
   renderAchFile(achFile);
   updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'entryCount', transactions.length.toString());
-  updateField(achFile.length - 8, RECORD_TYPE_CODES.FILE_TRAILER, 'blockCount', Math.floor(achFile.length / 10).toString());
+  updateField(achFile.length - 5, RECORD_TYPE_CODES.FILE_TRAILER, 'blockCount', Math.floor(achFile.length / 10).toString());
 }
 
 function loadAchTransactions(batchStartLine) {
