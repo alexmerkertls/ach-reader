@@ -11,6 +11,10 @@ More details on each field can be found [here](https://achdevguide.nacha.org/ach
 
 Opens a file selection dialog that allows you to select an ACH file to load. The file is loaded upon confirmation.
 
+### New File
+
+Creates a new file will no transactions.
+
 ### Reload File
 
 Reloads the selected file from your machine.
