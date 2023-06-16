@@ -541,6 +541,7 @@ function parseAndLoadTransactions(text, batchStartLine) {
   const batchEnd = batchStartLine + transactions.length + 1;
   renderAchFile(achFile);
   updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'entryCount', transactions.length.toString());
+  updateField(achFile.length - 8, RECORD_TYPE_CODES.FILE_TRAILER, 'blockCount', Math.floor(achFile.length / 10).toString());
 }
 
 function loadAchTransactions(batchStartLine) {
