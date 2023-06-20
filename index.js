@@ -429,7 +429,7 @@ function parseAchFile(contents) {
 function writeAchFile(achFile) {
   return achFile.map((record) => {
     const fields = getRecordDefinition(record.recordTypeCode, record.padding);
-    const text = [ 
+    return [ 
       record.recordTypeCode,
       ...fields.map((field) => record[field.key])
     ].join('');
@@ -522,6 +522,7 @@ function parseAndLoadTransactions(text, batchStartLine) {
     const checkDigit = routingNumber.substring(8, 9);
     const receivingName = institutionName.substring(0, 22);
     const amount = Math.round(parseFloat(amountText) * 100).toString();
+    const odfi = achFile[batchStartLine].originatingDfiId;
     return {
       recordTypeCode: RECORD_TYPE_CODES.ENTRY,
       transactionCode,
@@ -533,7 +534,7 @@ function parseAndLoadTransactions(text, batchStartLine) {
       receivingName,
       discData: '',
       addendaRecordId: '0',
-      traceNumber: `${receivingDfiId}${(index + 1).toString().padStart(7, '0')}`,
+      traceNumber: `${odfi}${(index + 1).toString().padStart(7, '0')}`,
     };
   });
   achFile = achFile.filter(r => !r.padding); // remove padding
