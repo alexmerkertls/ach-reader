@@ -23,7 +23,7 @@ function createEmptyRecord(recordTypeCode, line, padding) {
   for (field of fields) {
     let value = null;
     if (field.defaultValue) value = field.defaultValue;
-    if (field.required && !value) {
+    if (field.required && value === null) {
       const date = new Date();
       if (field.pattern == PATTERN.ALPHANUMERIC) value = camelCaseToDelimiterCase(field.key, ' ').toUpperCase().substring(0, field.length);
       else if (field.pattern == PATTERN.NUMERIC) value = '0';
@@ -41,12 +41,13 @@ function createEmptyRecord(recordTypeCode, line, padding) {
 }
 
 const newFile = () => {
+  document.querySelector('input#achFile').value = null;
   achFile = [
     createEmptyRecord(RECORD_TYPE_CODES.FILE_HEADER, 0),
     createEmptyRecord(RECORD_TYPE_CODES.BATCH_HEADER, 1),
     createEmptyRecord(RECORD_TYPE_CODES.BATCH_TRAILER, 2),
     createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, 3),
-    ...(new Array(4).fill(0).map((_, line) => createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, line + 4, true))),
+    ...(new Array(6).fill(0).map((_, line) => createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, line + 4, true))),
   ];
   renderAchFile(achFile);
 }
@@ -82,7 +83,7 @@ document.querySelector('button#save').addEventListener('click', () => {
 });
 
 const PATTERN = {
-  ALPHANUMERIC: /^[A-z0-9 ]*$/,
+  ALPHANUMERIC: /^[A-z0-9 -:]*$/,
   NUMERIC: /^[0-9]+$/,
   DATE: /^[0-9]{6}$/,
   TIME: /^[0-9]{4}$/,
@@ -199,7 +200,7 @@ function updateOdfi(achFile, record) {
   // this is the batch header being updated
   const [_, batchEnd] = findBatchRecords(record.line);
   const entries = achFile.slice(record.line + 1, batchEnd).filter(rec => rec.recordTypeCode == RECORD_TYPE_CODES.ENTRY);
-  entries.forEach((entry, index) => updateField(entry.line, entry.recordTypeCode, 'traceNumber', record.originatingDfiId + index.toString().padStart(7, '0')));
+  entries.forEach((entry, index) => updateField(entry.line, entry.recordTypeCode, 'traceNumber', record.originatingDfiId + (index + 1).toString().padStart(7, '0')));
   updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'originatingDfiId', record.originatingDfiId);
 }
 
@@ -355,7 +356,7 @@ const ACH_SPEC = {
     { key: 'totalDebits', name: 'Total Debit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, static: true, format: FORMAT.MONEY },
     { key: 'totalCredits', name: 'Total Credit Entry Dollar Amount', length: 12, pattern: PATTERN.NUMERIC, static: true, format: FORMAT.MONEY },
     { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, static: true },
-    { key: 'messageAuthCode', name: 'Message Authentication Code', length: 19 , pattern: PATTERN.NUMERIC },
+    { key: 'messageAuthCode', name: 'Message Authentication Code', length: 19 , pattern: PATTERN.NUMERIC, defaultValue: '' },
     { key: 'reserved', name: 'Reserved', length: 6, pattern: /$ {6}$/, static: true },
     { key: 'originatingDfiId', name: 'Originating DFI Identification', length: 8, pattern: PATTERN.NUMERIC, static: true },
     { key: 'batchNumber', name: 'Batch Number', length: 7, pattern: PATTERN.NUMERIC, static: true, defaultValue: '1' },
@@ -394,7 +395,7 @@ function validate(field, value) {
     throw new Error(`"${field.name}" does not match the regex pattern ${field.pattern}`);
   }
   if (field.pattern == PATTERN.ALPHANUMERIC) return value.padEnd(field.length, ' ');
-  if (field.pattern == PATTERN.NUMERIC) return value.padStart(field.length, '0');
+  if ((field.required || field.static) && field.pattern == PATTERN.NUMERIC) return value.padStart(field.length, '0');
   return value;
 }
 
@@ -520,7 +521,7 @@ function parseAndLoadTransactions(text, batchStartLine) {
     const receivingDfiId = routingNumber.substring(0, 8);
     const checkDigit = routingNumber.substring(8, 9);
     const receivingName = institutionName.substring(0, 22);
-    const amount = (parseInt(amountText) * 100).toString();
+    const amount = Math.round(parseFloat(amountText) * 100).toString();
     return {
       recordTypeCode: RECORD_TYPE_CODES.ENTRY,
       transactionCode,
@@ -535,13 +536,20 @@ function parseAndLoadTransactions(text, batchStartLine) {
       traceNumber: `${receivingDfiId}${(index + 1).toString().padStart(7, '0')}`,
     };
   });
+  achFile = achFile.filter(r => !r.padding); // remove padding
   achFile.splice(batchStartLine + 1, 0, ...transactions);
   // re-number lines
   achFile.forEach((record, index) => record.line = index);
   const batchEnd = batchStartLine + transactions.length + 1;
+  const fileEnd = achFile.length - 1;
+  while (achFile.length % 10 > 0) {
+    // add padding
+    achFile.push(createEmptyRecord(RECORD_TYPE_CODES.FILE_TRAILER, achFile.length, true));
+  }
   renderAchFile(achFile);
   updateField(batchEnd, RECORD_TYPE_CODES.BATCH_TRAILER, 'entryCount', transactions.length.toString());
-  updateField(achFile.length - 5, RECORD_TYPE_CODES.FILE_TRAILER, 'blockCount', Math.floor(achFile.length / 10).toString());
+  updateField(fileEnd, RECORD_TYPE_CODES.FILE_TRAILER, 'blockCount', Math.ceil(achFile.length / 10).toString());
+  updateField(fileEnd, RECORD_TYPE_CODES.FILE_TRAILER, 'entryCount', transactions.length.toString());
 }
 
 function loadAchTransactions(batchStartLine) {
