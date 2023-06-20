@@ -32,8 +32,8 @@ function createEmptyRecord(recordTypeCode, line, padding) {
         (date.getMonth() + 1).toString().padStart(2, '0')}${
         date.getDate().toString().padStart(2, '0')}`;
       else if (field.pattern == PATTERN.TIME) value = `${
-        date.getHour().toString().padStart(2, '0')}${
-        date.getMinute().toString().padStart(2, '0')}`;
+        date.getHours().toString().padStart(2, '0')}${
+        date.getMinutes().toString().padStart(2, '0')}`;
     }
     record[field.key] = validate(field, value || '');
   }
@@ -317,13 +317,13 @@ const ACH_SPEC = {
     { key: 'originSpace', name: 'Space prefix for Immediate Origin', length: 1, pattern: /^ $/, static: true, defaultValue: ' ' },
     { key: 'origin', name: 'Immediate Origin', length: 9, pattern: PATTERN.NUMERIC, required: true },
     { key: 'creationDate', name: 'File Creation Date', length: 6, pattern: PATTERN.DATE, required: true, format: FORMAT.DATE },
-    { key: 'creationTime', name: 'File Creation Time', length: 4, pattern: PATTERN.TIME, format: FORMAT.TIME },
+    { key: 'creationTime', name: 'File Creation Time', length: 4, pattern: PATTERN.TIME, required: true, format: FORMAT.TIME },
     { key: 'idModifier', name: 'File ID Modifier', length: 1, pattern: PATTERN.ALPHANUMERIC, required: true, defaultValue: '0' }, 
     { key: 'recordSize', name: 'Record Size', length: 3, pattern: /^094$/, static: true, defaultValue: '094' },
     { key: 'blockingFactor', name: 'Blocking Factor', length: 2, pattern: /^10$/, static: true, defaultValue: '10' },
     { key: 'formatCode', name: 'Format Code', length: 1, pattern: /^1$/, static: true, defaultValue: '1' },
-    { key: 'destinationName', name: 'Immediate Destination Name', length: 23, pattern: PATTERN.ALPHANUMERIC },
-    { key: 'originName', name: 'Immediate Origin Name', length: 23, pattern: PATTERN.ALPHANUMERIC },
+    { key: 'destinationName', name: 'Immediate Destination Name', length: 23, pattern: PATTERN.ALPHANUMERIC, defaultValue: 'Imd Destination Name' },
+    { key: 'originName', name: 'Immediate Origin Name', length: 23, pattern: PATTERN.ALPHANUMERIC, defaultValue: 'Imd Origin Name' },
     { key: 'referenceCode', name: 'Reference Code', length: 8, pattern: PATTERN.ALPHANUMERIC },
   ],
   [RECORD_TYPE_CODES.FILE_TRAILER]: [
@@ -445,7 +445,7 @@ function onFieldFocus(evt) {
     if (record) {
       const field = getRecordDefinition(record.recordTypeCode, record.padding).find(fld => fld.key === fieldKey);
       if (field.pattern == PATTERN.ALPHANUMERIC) input.value = input.value.trim();
-      if (field.pattern == PATTERN.NUMERIC) input.value = parseInt(input.value).toString();
+      if ((input.value != null && input.value != '') && field.pattern == PATTERN.NUMERIC) input.value = parseInt(input.value).toString();
     }
     evt.stopPropagation();
   }
@@ -476,7 +476,7 @@ function onFieldBlur(evt) {
     if (record) {
       const field = getRecordDefinition(record.recordTypeCode, record.padding).find(fld => fld.key === fieldKey);
       if (field.pattern == PATTERN.ALPHANUMERIC) input.value = input.value.padEnd(field.length, ' ');
-      if (field.pattern == PATTERN.NUMERIC) input.value = input.value.padStart(field.length, '0');
+      if ((input.value != null && input.value != '') && field.pattern == PATTERN.NUMERIC) input.value = input.value.padStart(field.length, '0');
     }
     evt.stopPropagation();
   }
