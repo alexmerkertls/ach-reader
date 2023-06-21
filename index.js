@@ -384,7 +384,7 @@ const ACH_SPEC = {
   ],
 };
 
-function validate(field, value) {
+function validate(field, value, forcePad = false) {
   if (field.required && value.match(/^ *$/)) {
     throw new Error(`"${field.name}" is required.`);
   }
@@ -395,7 +395,8 @@ function validate(field, value) {
     throw new Error(`"${field.name}" does not match the regex pattern ${field.pattern}`);
   }
   if (field.pattern == PATTERN.ALPHANUMERIC) return value.padEnd(field.length, ' ');
-  if ((field.required || field.static) && field.pattern == PATTERN.NUMERIC) return value.padStart(field.length, '0');
+  if ((field.required || field.static || forcePad) && field.pattern == PATTERN.NUMERIC) return value.padStart(field.length, '0');
+  if (forcePad) return value.padEnd(field.length, ' ');
   return value;
 }
 
@@ -431,7 +432,7 @@ function writeAchFile(achFile) {
     const fields = getRecordDefinition(record.recordTypeCode, record.padding);
     return [ 
       record.recordTypeCode,
-      ...fields.map((field) => record[field.key])
+      ...fields.map((field) => validate(field, record[field.key], true))
     ].join('');
   }).join('\n');
 }
