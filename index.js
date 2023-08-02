@@ -342,7 +342,7 @@ const ACH_SPEC = {
     { key: 'companyId', name: 'Company Identification', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true, onChange: updateCompanyId },
     { key: 'standardEntryClass', name: 'Standard Entry Class Code', length: 3, pattern: PATTERN.ALPHANUMERIC, required: true },
     { key: 'companyEntryDesc', name: 'Company Entry Description', length: 10, pattern: PATTERN.ALPHANUMERIC, required: true },
-    { key: 'companyDescDate', name: 'Company Entry Description', length: 6, pattern: PATTERN.ALPHANUMERIC },
+    { key: 'companyDescDate', name: 'Company Description Date', length: 6, pattern: PATTERN.DATE, format: FORMAT.DATE },
     { key: 'effectiveEntryDate', name: 'Effective Entry Date', length: 6, pattern: PATTERN.DATE, format: FORMAT.DATE },
     { key: 'settlementDate', name: 'Settlement Date', length: 3, pattern: /^\d{3}$/ },
     { key: 'originatorStatus', name: 'Originator Status Code', length: 1, pattern: PATTERN.ALPHANUMERIC },
