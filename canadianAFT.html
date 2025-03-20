@@ -1,0 +1,75 @@
+<html>
+<head>
+  <title>Canadian AFT File Reader/Editor</title>
+  <style>
+    input[type="text"] {
+      border: none;
+      outline: #bbb solid 1px;
+      padding: 0;
+      font-family: monospace;
+      font-size: 0.75rem;
+      margin-top: 1px;
+      background: inherit;
+    }
+    input:read-only {
+      background: #ddd;
+    }
+    input[data-error] {
+      outline-color: #f05;
+      background: #fcc;
+    }
+    div#contents .row {
+      margin-top: 3px;
+      position: relative;
+    }
+    .row:hover {
+      background: #ffffcc;
+    }
+    div#tooltip {
+      visibility: hidden;
+      position: fixed;
+      left: 0;
+      top: 0;
+      outline: #bbb solid 1px;
+      padding: 2px;
+    }
+
+    div[data-record-type="C-segment"],
+    div[data-record-type="D-segment"] {
+      margin-left: 12px;
+    }
+
+    input[required][value=""] {
+      outline-color: #f05
+    }
+
+    button {
+      display: inline-block;
+      position: relative;
+      margin-left: 5px;
+      top: -2px;
+    }
+
+    div#footer {
+      position: fixed;
+      bottom: 0;
+    }
+</style>
+</head>
+<body>
+  <h3>AFT File Reader/Editor</h3>
+  <div>
+    <input id="aftFile" type="file" />
+    <button id="new">New File</button>
+    <button id="reload">Reload File</button>
+    <button id="reset">Reset Errors</button>
+    <button id="save">Save</button>
+  </div>
+  <div id="contents"></div>
+  <div id="footer">
+    <a href="https://github.com/alexmerkertls/ach-reader">View on GitHub</a>
+  </div>
+  <script src="./canadianAFT.js"></script>
+  <div id="tooltip"></div>
+</body>
+</html>
