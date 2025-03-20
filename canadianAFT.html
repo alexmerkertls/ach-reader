@@ -7,7 +7,9 @@
       outline: #bbb solid 1px;
       padding: 0;
       font-family: monospace;
-      font-size: 1.25rem;
+      font-size: 0.75rem;
+      margin-top: 1px;
+      background: inherit;
     }
     input:read-only {
       background: #ddd;
@@ -17,8 +19,11 @@
       background: #fcc;
     }
     div#contents .row {
-      margin-top: 5px;
+      margin-top: 3px;
       position: relative;
+    }
+    .row:hover {
+      background: #ffffcc;
     }
     div#tooltip {
       visibility: hidden;
@@ -29,14 +34,9 @@
       padding: 2px;
     }
 
-    div[data-record-type="5"],
-    div[data-record-type="8"] {
+    div[data-record-type="C-segment"],
+    div[data-record-type="D-segment"] {
       margin-left: 12px;
-    }
-
-    div[data-record-type="6"],
-    div[data-record-type="7"] {
-      margin-left: 24px;
     }
 
     input[required][value=""] {

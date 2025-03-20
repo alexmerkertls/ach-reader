@@ -587,7 +587,7 @@ function showTooltip(evt) {
     const { top, height } = input.getBoundingClientRect();
     const { name, fieldLength, error, fieldKey, recordType } = extractAttributes(input, ['data-name', 'data-field-length', 'data-error', 'data-field-key', 'data-record-type']);
     if (name) {
-      const field = AFT_SPEC[recordType].find(f => f.key == fieldKey);
+      const field = AFT_SPEC[recordType].find(f => f.key == fieldKey) || AFT_SPEC[recordType].find(f => f.segment).definition.find(sf => sf.key == fieldKey);
       tooltip.style.visibility = 'visible';
       tooltip.style.background = error ? '#fcc' : '#ffb';
       tooltip.style.left = evt.x;
@@ -623,6 +623,7 @@ function renderAftFile(aftFile) {
   const container = document.createElement('div');
   aftFile.forEach((record) => {
     const fields = getRecordDefinition(record.recordTypeCode);
+    const rows = [];
     const row = createElementFromHTML(`
       <div
         id="record-${record.line}"
@@ -631,11 +632,31 @@ function renderAftFile(aftFile) {
       >
       </div>
     `);
+    rows.push(row);
     row.appendChild(renderField(record, { name: 'Record Type Code', length: 1, static, key: 'recordTypeCode' }, { value: record.recordTypeCode }));
     fields.forEach((field) => {
-      const value = record[field.key];
-      const input = renderField(record, field, { value });
-      row.appendChild(input);
+      if (field.segment) {
+        for (let i = 0; i < field.limit; i += 1) {
+          const subRow = createElementFromHTML(`
+            <div
+              class="row"
+              id="record-${record.line}-segment-${i + 1}"
+              data-record-type="${record.recordTypeCode}-segment"
+            >
+            </div>
+          `);
+          field.definition.forEach((subfield) => {
+            const value = record.parts[i][subfield.key];
+            const input = renderField(record, subfield, { value });
+            subRow.appendChild(input);
+          });
+          rows.push(subRow);
+        }
+      } else {
+        const value = record[field.key];
+        const input = renderField(record, field, { value });
+        row.appendChild(input);
+      }
     });
     let button = null;
     switch (record.recordTypeCode) {
@@ -658,7 +679,9 @@ function renderAftFile(aftFile) {
       `);
       row.appendChild(buttonElement);
     }
-    container.appendChild(row);
+    rows.forEach((r) => {
+      container.appendChild(r);
+    });
   });
 
   container.addEventListener('click', onClick, true);
